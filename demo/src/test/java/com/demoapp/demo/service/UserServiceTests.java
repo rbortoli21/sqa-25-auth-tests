@@ -64,6 +64,21 @@ public class UserServiceTests {
   }
 
   @Test
+  void testShouldCreateUserWithEncryptedPassword() {
+    String email = "test@email.com";
+    String password = "passwordBeforeEncrypt";
+    User user = new User();
+    user.setEmail(email);
+    user.setPassword(password);
+
+    when(userRepository.save(any(User.class))).thenReturn(user);
+
+    User created = userService.createUser(email, password);
+
+    assertNotEquals(password, created.getPassword());
+  }
+
+  @Test
   void testCreateUser() {
     String email = "test@email.com";
     String password = "SenhaForte123";
