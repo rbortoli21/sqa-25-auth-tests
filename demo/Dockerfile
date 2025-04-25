@@ -12,5 +12,5 @@ RUN mvn -B clean package -DskipTests
 
 FROM openjdk:21
 COPY --from=build /workspace/target/*.jar app.jar
-EXPOSE 8081
+EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
