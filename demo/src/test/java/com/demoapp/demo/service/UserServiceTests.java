@@ -45,14 +45,28 @@ public class UserServiceTests {
   @Test
   void testIsEmailValid() {
     assertTrue(userService.isEmailValid("test@email.com"));
+    assertFalse(userService.isEmailValid("@."));
     assertFalse(userService.isEmailValid("invalidemail"));
     assertFalse(userService.isEmailValid(null));
   }
 
   @Test
+  void testShouldNotCreateUserWithEmptyPassword() {
+    String email = "test@email.com";
+    String password = "";
+    User user = new User();
+    user.setEmail(email);
+    user.setPassword(password);
+
+    when(userRepository.save(any(User.class))).thenReturn(user);
+
+    assertThrows(Exception.class, () -> userService.createUser(email, password));
+  }
+
+  @Test
   void testCreateUser() {
     String email = "test@email.com";
-    String password = "Abcdef1@";
+    String password = "SenhaForte123";
     User user = new User();
     user.setEmail(email);
     user.setPassword(password);

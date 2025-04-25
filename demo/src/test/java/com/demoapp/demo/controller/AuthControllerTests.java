@@ -1,29 +1,36 @@
 package com.demoapp.demo.controller;
+
 import com.demoapp.demo.dto.EmailDTO;
 import com.demoapp.demo.dto.ErrorResponse;
 import com.demoapp.demo.dto.UserDTO;
 import com.demoapp.demo.model.User;
+import com.demoapp.demo.repository.UserRepository;
 import com.demoapp.demo.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class AuthControllerTests {
 
+    private UserRepository userRepository;
     private UserService userService;
     private AuthController authController;
 
     @BeforeEach
     void setUp() {
-        userService = mock(UserService.class);
+        userRepository = mock(UserRepository.class);
+        userService = new UserService(userRepository);
         authController = new AuthController(userService);
     }
 
     @Test
-    void testSignupAcceptsClearlyInvalidEmail() {
+    void testSignupWithClearlyInvalidEmail() {
         String invalidEmail = "@.";
         String password = "Abcdef1@";
 
@@ -31,21 +38,23 @@ class AuthControllerTests {
         userDTO.setEmail(invalidEmail);
         userDTO.setPassword(password);
 
-        when(userService.isEmailValid(invalidEmail)).thenReturn(true);
-        when(userService.isPasswordValid(password)).thenReturn(true);
-        when(userService.findByEmail(invalidEmail)).thenReturn(null);
-
-        User user = new User();
-        user.setEmail(invalidEmail);
-        user.setPassword(password);
-
-        when(userService.createUser(invalidEmail, password)).thenReturn(user);
-
         ResponseEntity<?> response = authController.signup(userDTO);
 
-        assertEquals(200, response.getStatusCodeValue());
-        assertTrue(response.getBody() instanceof User);
-        assertEquals(invalidEmail, ((User) response.getBody()).getEmail());
+        assertEquals(422, response.getStatusCodeValue());
+        assertTrue(response.getBody() instanceof ErrorResponse);
+    }
+
+    @Test
+    void testSigninInvalidCredentials() {
+        UserDTO userDTO = new UserDTO();
+        userDTO.setEmail("test@email.com");
+        userDTO.setPassword("wrongpass");
+
+        when(userRepository.findByEmail("test@email.com")).thenReturn(Optional.empty());
+
+        ResponseEntity<?> response = authController.signin(userDTO);
+        assertEquals(401, response.getStatusCodeValue());
+        assertTrue(response.getBody() instanceof ErrorResponse);
     }
 
     @Test
@@ -53,8 +62,6 @@ class AuthControllerTests {
         UserDTO userDTO = new UserDTO();
         userDTO.setEmail("invalid");
         userDTO.setPassword("Abcdef1@");
-
-        when(userService.isEmailValid("invalid")).thenReturn(false);
 
         ResponseEntity<?> response = authController.signup(userDTO);
         assertEquals(422, response.getStatusCodeValue());
@@ -67,9 +74,6 @@ class AuthControllerTests {
         userDTO.setEmail("test@email.com");
         userDTO.setPassword("invalid");
 
-        when(userService.isEmailValid("test@email.com")).thenReturn(true);
-        when(userService.isPasswordValid("invalid")).thenReturn(false);
-
         ResponseEntity<?> response = authController.signup(userDTO);
         assertEquals(422, response.getStatusCodeValue());
         assertTrue(response.getBody() instanceof ErrorResponse);
@@ -81,9 +85,11 @@ class AuthControllerTests {
         userDTO.setEmail("test@email.com");
         userDTO.setPassword("Abcdef1@");
 
-        when(userService.isEmailValid("test@email.com")).thenReturn(true);
-        when(userService.isPasswordValid("Abcdef1@")).thenReturn(true);
-        when(userService.findByEmail("test@email.com")).thenReturn(new User());
+        User existingUser = new User();
+        existingUser.setEmail("test@email.com");
+        existingUser.setPassword("Abcdef1@");
+
+        when(userRepository.findByEmail("test@email.com")).thenReturn(Optional.of(existingUser));
 
         ResponseEntity<?> response = authController.signup(userDTO);
         assertEquals(409, response.getStatusCodeValue());
@@ -96,34 +102,17 @@ class AuthControllerTests {
         userDTO.setEmail("test@email.com");
         userDTO.setPassword("Abcdef1@");
 
-        when(userService.isEmailValid("test@email.com")).thenReturn(true);
-        when(userService.isPasswordValid("Abcdef1@")).thenReturn(true);
-        when(userService.findByEmail("test@email.com")).thenReturn(null);
-
-        User user = new User();
-        user.setEmail("test@email.com");
-        user.setPassword("Abcdef1@");
-
-        when(userService.createUser("test@email.com", "Abcdef1@")).thenReturn(user);
+        when(userRepository.findByEmail("test@email.com")).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            user.setId(1L);
+            return user;
+        });
 
         ResponseEntity<?> response = authController.signup(userDTO);
         assertEquals(200, response.getStatusCodeValue());
         assertTrue(response.getBody() instanceof User);
-    }
-
-    @Test
-    void testSigninInvalidCredentials() {
-        UserDTO userDTO = new UserDTO();
-        userDTO.setEmail("test@email.com");
-        userDTO.setPassword("wrongpass");
-
-        when(userService.isEmailValid("test@email.com")).thenReturn(true);
-        when(userService.isPasswordValid("wrongpass")).thenReturn(true);
-        when(userService.findByEmail("test@email.com")).thenReturn(null);
-
-        ResponseEntity<?> response = authController.signin(userDTO);
-        assertEquals(401, response.getStatusCodeValue());
-        assertTrue(response.getBody() instanceof ErrorResponse);
+        assertEquals("test@email.com", ((User) response.getBody()).getEmail());
     }
 
     @Test
@@ -136,9 +125,7 @@ class AuthControllerTests {
         user.setEmail("test@email.com");
         user.setPassword("Abcdef1@");
 
-        when(userService.isEmailValid("test@email.com")).thenReturn(true);
-        when(userService.isPasswordValid("Abcdef1@")).thenReturn(true);
-        when(userService.findByEmail("test@email.com")).thenReturn(user);
+        when(userRepository.findByEmail("test@email.com")).thenReturn(Optional.of(user));
 
         ResponseEntity<?> response = authController.signin(userDTO);
         assertEquals(200, response.getStatusCodeValue());
@@ -150,8 +137,7 @@ class AuthControllerTests {
         EmailDTO emailDTO = new EmailDTO();
         emailDTO.setEmail("notfound@email.com");
 
-        when(userService.isEmailValid("notfound@email.com")).thenReturn(true);
-        when(userService.findByEmail("notfound@email.com")).thenReturn(null);
+        when(userRepository.findByEmail("notfound@email.com")).thenReturn(Optional.empty());
 
         ResponseEntity<?> response = authController.resetPassword(emailDTO);
         assertEquals(404, response.getStatusCodeValue());
@@ -166,8 +152,7 @@ class AuthControllerTests {
         User user = new User();
         user.setEmail("test@email.com");
 
-        when(userService.isEmailValid("test@email.com")).thenReturn(true);
-        when(userService.findByEmail("test@email.com")).thenReturn(user);
+        when(userRepository.findByEmail("test@email.com")).thenReturn(Optional.of(user));
 
         ResponseEntity<?> response = authController.resetPassword(emailDTO);
         assertEquals(200, response.getStatusCodeValue());
